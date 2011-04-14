@@ -1,9 +1,9 @@
-package com.gaic.uwd.core.util;
+package com.cedarsoftware.util;
 
 import java.util.Calendar;
 import java.util.Date;
 
-import com.gaic.uwd.core.util.test.AbstractBaseTestSpringImpl;
+import junit.framework.TestCase;
 
 /**
  * Test for DeepEquals (equals() and hashCode())
@@ -24,15 +24,8 @@ import com.gaic.uwd.core.util.test.AbstractBaseTestSpringImpl;
  *         See the License for the specific language governing permissions and
  *         limitations under the License.
  */
-public class DeepEqualsTest extends AbstractBaseTestSpringImpl 
-{
-    @Override
-    public String[] getConfigLocations()
-    {
-        String [] configLocations = {"classpath:spring/conf/uwd-core-util-test.xml", "classpath:spring/conf/uwd-core-util-test-optional.xml"};
-        return configLocations;
-    }
-    
+public class DeepEqualsTest extends TestCase
+{    
     private class Person
     {
         String first;

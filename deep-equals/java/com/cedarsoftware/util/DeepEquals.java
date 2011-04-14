@@ -1,4 +1,4 @@
-package com.gaic.uwd.core.util;
+package com.software.util;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
