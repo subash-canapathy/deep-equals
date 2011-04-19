@@ -8,8 +8,11 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -73,7 +76,7 @@ public class DeepEquals
         return deepEquals(a, b, visited);
     }
     
-    public static boolean deepEquals(Object a, Object b, Set visited)
+    private static boolean deepEquals(Object a, Object b, Set visited)
     {
         LinkedList<DualKey> stack = new LinkedList<DualKey>();
         stack.addFirst(new DualKey(a, b));
@@ -97,6 +100,9 @@ public class DeepEquals
                 return false;
             }
             
+            // Handle all [] types.  In order to be equal, the arrays must be the same 
+            // length, be of the same type, be in the same order, and all elements within
+            // the array must be deeply equivalent.
             if (dualKey._key1.getClass().isArray())
             {
                 int len = Array.getLength(dualKey._key1);
@@ -116,10 +122,19 @@ public class DeepEquals
                 continue;
             }
             
-            // Set comparison is complex.  First, the easy check - make sure the sets are the same length.
-            // Next, verify that the two sets have the same deep Hash code (this is computed in linear time).
-            // If both sets have same length and same hash, then ensure all elements from one set are deepEquals
-            // to all elements in the other Set (O(N^2).
+            // Special handle SortedSets because they are fast to compare because their
+            // elements must be in the same order to be equivalent Sets.
+            if (dualKey._key1 instanceof SortedSet)
+            {
+                if (!compareOrdered(dualKey, stack, visited))
+                {
+                    return false;
+                }
+                continue;
+            }
+            
+            // Handled unordered Sets.  This is an expensive comparison because order cannot 
+            // be assumed, therefore it runs in O(n^2) when the Sets are the same length.
             if (dualKey._key1 instanceof Set)
             {
                 if (!compareUnordered((Set)dualKey._key1, (Set) dualKey._key2, visited))
@@ -133,28 +148,50 @@ public class DeepEquals
             // matters, therefore this comparison is faster than using unordered comparison.
             if (dualKey._key1 instanceof Collection)
             {
-                Collection col1 = (Collection) dualKey._key1;
-                Collection col2 = (Collection) dualKey._key2;
-                if (col1.size() != col2.size())
+                if (!compareOrdered(dualKey, stack, visited))
+                {
+                    return false;
+                }                                
+                continue;
+            }
+            
+            // Compare two SortedMaps.  This takes advantage of the fact that these
+            // Maps can be compared in O(N) time due to their ordering.
+            if (dualKey._key1 instanceof SortedMap)
+            {
+                Map map1 = (Map) dualKey._key1;
+                Map map2 = (Map) dualKey._key2;
+                
+                if (map1.size() != map2.size())
                 {
                     return false;
                 }
                                 
-                Iterator i1 = col1.iterator();
-                Iterator i2 = col2.iterator();
+                Iterator i1 = map1.entrySet().iterator();
+                Iterator i2 = map2.entrySet().iterator();
                 
                 while (i1.hasNext())
                 {
-                    DualKey dk = new DualKey(i1.next(), i2.next());
+                    Map.Entry entry1 = (Map.Entry)i1.next();
+                    Map.Entry entry2 = (Map.Entry)i2.next();
+                    
+                    DualKey dk = new DualKey(entry1.getKey(), entry2.getKey());
                     if (!visited.contains(dk))
-                    {
+                    {   // Keys must match
+                        stack.addFirst(dk);
+                    }
+                    
+                    dk = new DualKey(entry1.getValue(), entry2.getValue());
+                    if (!visited.contains(dk))
+                    {   // Values must match
                         stack.addFirst(dk);
                     }
                 }
-                                
-                continue;
+                
+                continue;                
             }
             
+            // Compare two Unordered Maps.  This works in O(N^2) time.
             if (dualKey._key1 instanceof Map)
             {
                 Map<Object, Object> map1 = (Map) dualKey._key1;
@@ -183,6 +220,7 @@ public class DeepEquals
                         return false;
                     }
                     
+                    // Defer value comparisons to future iterations.
                     DualKey dk = new DualKey(entry1.getValue(), saveEntry2.getValue());
                     if (!visited.contains(dk))
                     {
@@ -223,7 +261,38 @@ public class DeepEquals
 
         return true;
     }
-    
+
+    /**
+     * Compare two Collections that must be same length and in same order.
+     * @param dualKey DualKey represents the two Collections to compare
+     * @param visited Collection of objects already compared (prevents cycles)
+     * @param stack add items to compare to the Stack (Stack versus recursion)
+     * @return boolean false if the Collections are not the same length, otherwise
+     * place collection items on Stack to be further compared.
+     */
+    private static boolean compareOrdered(DualKey dualKey, LinkedList<DualKey> stack, Collection visited)
+    {
+        Collection col1 = (Collection) dualKey._key1;
+        Collection col2 = (Collection) dualKey._key2;
+        if (col1.size() != col2.size())
+        {
+            return false;
+        }
+                        
+        Iterator i1 = col1.iterator();
+        Iterator i2 = col2.iterator();
+        
+        while (i1.hasNext())
+        {
+            DualKey dk = new DualKey(i1.next(), i2.next());
+            if (!visited.contains(dk))
+            {
+                stack.addFirst(dk);
+            }
+        }
+        return true;
+    }
+        
     /**
      * Deeply compare the two sets referenced by dualKey.  This method
      * attempts to quickly determine inequality by length, then hash,
@@ -249,32 +318,31 @@ public class DeepEquals
             return false;
         }
         
+        List copy = new ArrayList(col2);
+                
         for (Object element1 : col1)
         {
-            boolean found = false;
-            for (Object element2 : col2)
-            {   // recurse here (yes, that makes this a Stack-based implementation with partial recursion in
-                // the case of Sets).
-                if (deepEquals(element1, element2, visited))
+            int len = copy.size();
+            for (int i=0; i < len; i++)
+            {   // recurse here (yes, that makes this a Stack-based implementation with 
+                // partial recursion in the case of unordered Sets).
+                if (deepEquals(element1, copy.get(i), visited))
                 {
-                    found = true;
+                    copy.remove(i); // Shrink 2nd Set
                     break;
                 }                        
             }
             
-            if (!found)
-            {
+            if (len == copy.size())
+            {   // Nothing found, therefore Collections are not equivalent
                 return false;
             }
+            
         }
                         
         return true;        
     }      
         
-	/**
-	 * Test whether the passed in Class has an equals() 
-	 * method that is custom (not using Object.equals()).
-	 */
     public static boolean hasCustomEquals(Class c)
     {        
         Class origClass = c;
@@ -298,10 +366,6 @@ public class DeepEquals
         return false;
     }
 
-	/**
-	 * Test whether the passed in Class has a hashCode() 
-	 * method that is custom (not using Object.hashCode()).
-	 */
     public static int deepHashCode(Object obj)
     {
         Set visited = new HashSet();
@@ -419,7 +483,9 @@ public class DeepEquals
                     }
                     
                     int modifiers = field.getModifiers();
-                    if (!Modifier.isStatic(modifiers) && !field.getName().startsWith("this$") && !Modifier.isTransient(modifiers))
+                    if (!Modifier.isStatic(modifiers) && 
+                        !field.getName().startsWith("this$") && 
+                        !Modifier.isTransient(modifiers))
                     {   // speed up: do not count static fields, not go back up to enclosing object in nested case    
                         fields.add(field);
                     }                                      
