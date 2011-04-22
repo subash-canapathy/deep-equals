@@ -86,13 +86,14 @@ public class DeepEquals
             DualKey dualKey = stack.removeFirst();        
             visited.add(dualKey);
             
-            if (dualKey._key1 == null || dualKey._key2 == null)
-            {
-                if (dualKey._key1 != dualKey._key2)
-                {
-                    return false;
-                }
+            if (dualKey._key1 == dualKey._key2)
+            {   // Same instance is always equal to itself.
                 continue;
+            }
+            
+            if (dualKey._key1 == null || dualKey._key2 == null)
+            {   // If either one is null, not equal (both can't be null, due to above comparison).
+                return false;
             }
                             
             if (!dualKey._key1.getClass().equals(dualKey._key2.getClass()))
