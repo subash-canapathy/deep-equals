@@ -51,6 +51,10 @@ public class DeepEqualsTest extends TestCase
         String name;
         String type;
     }
+
+    private class Pathelogical
+    {
+    }
     
     private class ComparablePet extends Pet implements Comparable
     {
@@ -473,4 +477,12 @@ public class DeepEqualsTest extends TestCase
         assertTrue(DeepEquals.deepHashCode(map1) == DeepEquals.deepHashCode(map2));
         assertFalse(DeepEquals.deepEquals(map1, map2));        
     }    
+	
+    public void testPathelogical()
+    {
+        Pathelogical a = new Pathelogical();
+        Pathelogical b = new Pathelogical();
+
+        assertTrue(DeepEquals.deepEquals(a, b));
+    }
 }
