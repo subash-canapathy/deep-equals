@@ -1,0 +1,1 @@
+The official location for the DeepEquals source code is here: https://github.com/jdereg/java-util
